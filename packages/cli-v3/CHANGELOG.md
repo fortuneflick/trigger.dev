@@ -1,5 +1,15 @@
 # trigger.dev
 
+## 4.8.5
+
+### Patch Changes
+
+- Show CLI command errors in the same error format as other CLI errors, and keep them visible with `--log-level error`. ([`c515c3f74`](https://github.com/triggerdotdev/trigger.dev/commit/c515c3f74656fe79e311acb1d32fe8f091f18a8d))
+- Updated dependencies:
+  - `@trigger.dev/build@4.8.5`
+  - `@trigger.dev/core@4.8.5`
+  - `@trigger.dev/schema-to-json@4.8.5`
+
 ## 4.8.4
 
 ### Patch Changes
