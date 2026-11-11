@@ -1,0 +1,80 @@
+---
+title: "Send transactional email using AgentiSend"
+sidebarTitle: "AgentiSend email"
+description: "This example shows how to send a transactional email from a Trigger.dev task with AgentiSend, using an idempotency key so a retried run does not send twice."
+---
+
+## Overview
+
+A task that sends email can run more than once: the default retrying, `retry.onThrow`, or a replay from the dashboard. Each of those must not mail the user a second time.
+
+This task passes an `Idempotency-Key` derived from the payload (the user and the email it is), not from the moment. A retry sends the same key, and AgentiSend replays the first response instead of sending again.
+
+Errors that a retry cannot fix, such as an unverified sending domain, are thrown as `AbortTaskRunError` so the run stops instead of retrying.
+
+## Prerequisites
+
+- An [AgentiSend](https://agentisend.com) API key with `sending_access`, set as `AGENTISEND_API_KEY` in your Trigger.dev [environment variables](/deploy-environment-variables)
+- A From address on a domain you have verified in AgentiSend
+
+## Install
+
+```bash
+npm install agentisend
+```
+
+## Task code
+
+```ts trigger/welcome-email.ts
+import { AbortTaskRunError, retry, task } from "@trigger.dev/sdk";
+import { AgentiSend, AgentiSendError } from "agentisend";
+
+// Reads AGENTISEND_API_KEY from the environment.
+const agentisend = new AgentiSend();
+
+export const welcomeEmail = task({
+  id: "welcome-email",
+  run: async (payload: { userId: string; email: string; name: string }) => {
+    const result = await retry.onThrow(
+      async () => {
+        try {
+          return await agentisend.emails.send(
+            {
+              from: "Acme <hello@acme.com>",
+              to: payload.email,
+              subject: "Welcome to Acme",
+              html: `<p>Hello ${payload.name},</p><p>Welcome to Acme.</p>`,
+            },
+            // The same user and the same email give the same key, so a retry replays the first send.
+            { idempotencyKey: `welcome/${payload.userId}` }
+          );
+        } catch (error) {
+          // A refusal that waiting cannot fix (bad key, unverified domain) should not be retried.
+          if (error instanceof AgentiSendError && !error.retryable) {
+            throw new AbortTaskRunError(`${error.code}: ${error.fix}`);
+          }
+
+          throw error;
+        }
+      },
+      { maxAttempts: 3 }
+    );
+
+    return { emailId: result.id };
+  },
+});
+```
+
+## Testing your task
+
+To test this task in the dashboard, you can use the following payload:
+
+```json
+{
+  "userId": "123",
+  "email": "<your-test-email>", // Replace with your test email
+  "name": "Alice Testington"
+}
+```
+
+Run it twice with the same payload: the second run returns the same `emailId` and no second email is sent.
